@@ -1,30 +1,29 @@
-#db_config
-import os
+# app/db_config.py
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.orm import declarative_base
 from dotenv import load_dotenv
+import os
+import oracledb 
 
 load_dotenv()
 
-# Формат: oracle+oracledb://user:pass@host:port/service
+oracledb.init_oracle_client(lib_dir="/opt/oracle/instantclient")
+
 DATABASE_URL = os.getenv(
     "DATABASE_URL",
     "oracle+oracledb://erip_user:password@192.168.100.64:1521/orcl"
 )
 
-# 1. Асинхронный Engine (oracledb в thin mode по умолчанию)
 engine = create_async_engine(
     DATABASE_URL,
     pool_pre_ping=True,
-    pool_size=5,
-    max_overflow=10,
+    pool_size=10,
+    max_overflow=20,
     pool_timeout=30,
     echo=False,
-    # ✅ Убрали encoding/nencoding - oracledb использует UTF-8 по умолчанию
-    connect_args={}
+    connect_args={"encoding": "UTF-8", "nencoding": "UTF-8"}
 )
 
-# 2. Фабрика асинхронных сессий
 async_session_maker = async_sessionmaker(
     engine,
     class_=AsyncSession,
@@ -35,7 +34,6 @@ async_session_maker = async_sessionmaker(
 
 Base = declarative_base()
 
-# 3. Dependency для FastAPI
 async def get_db():
     async with async_session_maker() as session:
         try:
