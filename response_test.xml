@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="windows-1251"?>
+<ServiceProviderResponse>
+    <TransactionStart>
+        <ServiceProvider_TrxId>00000006</ServiceProvider_TrxId>
+        <Info><InfoLine>Номер операции: 00000006</InfoLine></Info>
+    </TransactionStart>
+</ServiceProviderResponse>

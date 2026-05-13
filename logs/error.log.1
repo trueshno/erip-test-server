@@ -1,0 +1,59 @@
+2026-05-08 10:04:46 | ERROR    | app.main | 💥 Критическая ошибка обработки | req_id=48840274
+Traceback (most recent call last):
+  File "/home/eripadmin/erip-billing/venv/lib/python3.10/site-packages/sqlalchemy/engine/base.py", line 1969, in _exec_single_context
+    self.dialect.do_execute(
+  File "/home/eripadmin/erip-billing/venv/lib/python3.10/site-packages/sqlalchemy/engine/default.py", line 922, in do_execute
+    cursor.execute(statement, parameters)
+  File "/home/eripadmin/erip-billing/venv/lib/python3.10/site-packages/oracledb/cursor.py", line 701, in execute
+    impl.execute(self)
+  File "src/oracledb/impl/thick/cursor.pyx", line 309, in oracledb.thick_impl.ThickCursorImpl.execute
+  File "src/oracledb/impl/thick/utils.pyx", line 450, in oracledb.thick_impl._raise_from_odpi
+  File "src/oracledb/impl/thick/utils.pyx", line 440, in oracledb.thick_impl._raise_from_info
+oracledb.exceptions.IntegrityError: ORA-00001: нарушено ограничение уникальности (ERIP_USER.UK_ERIP_REQUEST_ID)
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/home/eripadmin/erip-billing/app/main.py", line 135, in handle_erip_request
+    </ServiceProviderResponse>"""
+  File "/home/eripadmin/erip-billing/venv/lib/python3.10/site-packages/sqlalchemy/orm/session.py", line 4312, in flush
+    self._flush(objects)
+  File "/home/eripadmin/erip-billing/venv/lib/python3.10/site-packages/sqlalchemy/orm/session.py", line 4447, in _flush
+    with util.safe_reraise():
+  File "/home/eripadmin/erip-billing/venv/lib/python3.10/site-packages/sqlalchemy/util/langhelpers.py", line 146, in __exit__
+    raise exc_value.with_traceback(exc_tb)
+  File "/home/eripadmin/erip-billing/venv/lib/python3.10/site-packages/sqlalchemy/orm/session.py", line 4408, in _flush
+    flush_context.execute()
+  File "/home/eripadmin/erip-billing/venv/lib/python3.10/site-packages/sqlalchemy/orm/unitofwork.py", line 466, in execute
+    rec.execute(self)
+  File "/home/eripadmin/erip-billing/venv/lib/python3.10/site-packages/sqlalchemy/orm/unitofwork.py", line 642, in execute
+    util.preloaded.orm_persistence.save_obj(
+  File "/home/eripadmin/erip-billing/venv/lib/python3.10/site-packages/sqlalchemy/orm/persistence.py", line 93, in save_obj
+    _emit_insert_statements(
+  File "/home/eripadmin/erip-billing/venv/lib/python3.10/site-packages/sqlalchemy/orm/persistence.py", line 1227, in _emit_insert_statements
+    result = connection.execute(
+  File "/home/eripadmin/erip-billing/venv/lib/python3.10/site-packages/sqlalchemy/engine/base.py", line 1416, in execute
+    return meth(
+  File "/home/eripadmin/erip-billing/venv/lib/python3.10/site-packages/sqlalchemy/sql/elements.py", line 517, in _execute_on_connection
+    return connection._execute_clauseelement(
+  File "/home/eripadmin/erip-billing/venv/lib/python3.10/site-packages/sqlalchemy/engine/base.py", line 1639, in _execute_clauseelement
+    ret = self._execute_context(
+  File "/home/eripadmin/erip-billing/venv/lib/python3.10/site-packages/sqlalchemy/engine/base.py", line 1848, in _execute_context
+    return self._exec_single_context(
+  File "/home/eripadmin/erip-billing/venv/lib/python3.10/site-packages/sqlalchemy/engine/base.py", line 1988, in _exec_single_context
+    self._handle_dbapi_exception(
+  File "/home/eripadmin/erip-billing/venv/lib/python3.10/site-packages/sqlalchemy/engine/base.py", line 2344, in _handle_dbapi_exception
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+  File "/home/eripadmin/erip-billing/venv/lib/python3.10/site-packages/sqlalchemy/engine/base.py", line 1969, in _exec_single_context
+    self.dialect.do_execute(
+  File "/home/eripadmin/erip-billing/venv/lib/python3.10/site-packages/sqlalchemy/engine/default.py", line 922, in do_execute
+    cursor.execute(statement, parameters)
+  File "/home/eripadmin/erip-billing/venv/lib/python3.10/site-packages/oracledb/cursor.py", line 701, in execute
+    impl.execute(self)
+  File "src/oracledb/impl/thick/cursor.pyx", line 309, in oracledb.thick_impl.ThickCursorImpl.execute
+  File "src/oracledb/impl/thick/utils.pyx", line 450, in oracledb.thick_impl._raise_from_odpi
+  File "src/oracledb/impl/thick/utils.pyx", line 440, in oracledb.thick_impl._raise_from_info
+sqlalchemy.exc.IntegrityError: (oracledb.exceptions.IntegrityError) ORA-00001: нарушено ограничение уникальности (ERIP_USER.UK_ERIP_REQUEST_ID)
+[SQL: INSERT INTO transactions (id, erip_request_id, personal_account, amount, currency, service_trx_id, transaction_id, status, error_code, error_text, processed_at, metadata_json) VALUES (transactions_id_seq.nextval, :erip_request_id, :personal_account, :amount, :currency, :service_trx_id, :transaction_id, :status, :error_code, :error_text, :processed_at, :metadata_json) RETURNING transactions.id, transactions.created_at INTO :ret_0, :ret_1]
+[parameters: {'erip_request_id': 'TEST-SRV-002', 'personal_account': '111111', 'amount': Decimal('250000.00'), 'currency': '933', 'service_trx_id': None, 'transaction_id': '6180433', 'status': 'success', 'error_code': None, 'error_text': None, 'processed_at': datetime.datetime(2026, 5, 8, 10, 4, 45, 515648), 'metadata_json': '{"parsed": {"personal_account": "111111", "amount": "250000", "request_id": "TEST-SRV-002"}}', 'ret_0': <oracledb.Var of type DB_TYPE_VARCHAR with value []>, 'ret_1': <oracledb.Var of type DB_TYPE_DATE with value []>}]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
