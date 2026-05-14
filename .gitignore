@@ -1,9 +1,38 @@
-venv/
-__pycache__/
+```
+# Compiled Python files
 *.pyc
+__pycache__/
+
+# Virtual environments
+venv/
+.venv/
 .env
+.env.local
+*.env.*
+
+# Logs
 *.log
-.DS_Store
-.idea/
+
+# Coverage reports
+.coverage
+coverage/
+htmlcov/
+
+# IDE files
 .vscode/
+.idea/
 *.swp
+*.swo
+*.tmp
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+build/
+dist/
+target/
+.mypy_cache/
+.pytest_cache/
+```

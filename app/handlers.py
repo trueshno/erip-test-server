@@ -1,66 +1,189 @@
 # app/handlers.py
-ORDERS = {
-    "ORDER-123": {"amount": 100.00, "refunded": False},
-    "ORDER-456": {"amount": 500.00, "refunded": False},
-}
+"""
+Обработчики запросов ЕРИП: ServiceInfo и TransactionStart.
+"""
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
+from fastapi.responses import Response
+from datetime import datetime, timezone
+from decimal import Decimal, InvalidOperation
+import logging
+from typing import Optional, cast
 
-# Кэш для идемпотентности: {RefundRequestId: response_xml}
-_idempotency_cache = {}
+from .models import Transaction, Account, TransactionInfoLine
+from .xml_utils import build_service_info_xml, build_transaction_start_xml
+
+logger = logging.getLogger(__name__)
 
 
-def process_refund(data: dict) -> dict:
-    # 1. Проверяем идемпотентность (повторный запрос с тем же ID)
-    req_id = data.get('RefundRequestId')
-    if req_id in _idempotency_cache:
-        return _idempotency_cache[req_id]
+async def handle_service_info_request(
+    db: AsyncSession,
+    request_id: str,
+    account: Optional[str],
+    erip_request_id: Optional[str],
+    start_time: float,
+    terminal: Optional[str],
+    terminal_type: Optional[str]
+) -> Response:
+    """
+    Обрабатывает запрос ServiceInfo - информация о счёте абонента.
+    
+    Args:
+        db: Сессия базы данных
+        request_id: ID запроса для логирования
+        account: Лицевой счёт абонента
+        erip_request_id: Уникальный ID запроса ЕРИП
+        start_time: Время начала обработки
+        terminal: ID терминала
+        terminal_type: Тип терминала
+    
+    Returns:
+        XML-ответ с информацией о счёте
+    
+    Raises:
+        ValueError: Если счёт не указан или не найден
+    """
+    if not account:
+        raise ValueError("Не указан лицевой счёт (PersonalAccount)")
 
-    # 2. Валидация входных данных
-    order_id = data.get('OrderId')
-    amount_str = data.get('Amount')
+    # Поиск счёта в базе
+    result = await db.execute(
+        select(Account).where(Account.account_number == account)
+    )
+    acc = result.scalar_one_or_none()
+    
+    if not acc or cast(Optional[str], acc.status) != "active":
+        raise ValueError(f"Лицевой счёт {account} не найден или заблокирован")
 
-    if not order_id or not amount_str:
-        result = {"code": 4, "message": "Не указаны обязательные поля"}
-        if req_id: _idempotency_cache[req_id] = result
-        return result
+    # Формирование XML-ответа
+    xml_response = build_service_info_xml(acc)
 
+    # Сохранение транзакции
+    transaction = Transaction(
+        erip_request_id=erip_request_id,
+        request_type="ServiceInfo",
+        personal_account=account,
+        currency="933",
+        terminal_id=terminal,
+        terminal_type=_parse_int(terminal_type),
+        status="success",
+        processed_at=datetime.now(timezone.utc),
+        metadata_json=xml_response
+    )
+    db.add(transaction)
+    await db.commit()
+
+    return Response(
+        content=xml_response.encode("cp1251"),
+        media_type="text/xml; charset=windows-1251",
+        status_code=200
+    )
+
+
+async def handle_transaction_start_request(
+    db: AsyncSession,
+    request_id: str,
+    account: str,
+    amount_str: str,
+    erip_transaction_id: str,
+    agent: str,
+    auth_type: str,
+    terminal: str,
+    terminal_type: str,
+    erip_request_id: str,
+    currency: str,
+    datetime_str: str,
+    start_time: float
+) -> Response:
+    """
+    Обрабатывает запрос TransactionStart - начало транзакции оплаты.
+    
+    Args:
+        db: Сессия базы данных
+        request_id: ID запроса для логирования
+        account: Лицевой счёт абонента
+        amount_str: Сумма транзакции (строка)
+        erip_transaction_id: ID транзакции от ЕРИП
+        agent: Код агента
+        auth_type: Тип авторизации
+        terminal: ID терминала
+        terminal_type: Тип терминала
+        erip_request_id: Уникальный ID запроса ЕРИП
+        currency: Код валюты
+        datetime_str: Дата и время операции
+        start_time: Время начала обработки
+    
+    Returns:
+        XML-ответ с ID транзакции
+    
+    Raises:
+        ValueError: Если параметры некорректны
+    """
+    if not account:
+        raise ValueError("Не указан лицевой счёт")
+    if not amount_str:
+        raise ValueError("Не указана сумма операции")
+
+    # Валидация суммы
     try:
-        amount = float(amount_str)
-    except (ValueError, TypeError):
-        result = {"code": 4, "message": "Некорректная сумма возврата"}
-        if req_id: _idempotency_cache[req_id] = result
-        return result
+        amount = Decimal(amount_str)
+        if amount <= 0:
+            raise ValueError("Сумма должна быть больше 0")
+    except InvalidOperation:
+        raise ValueError("Неверный формат суммы")
 
-    if amount <= 0:
-        result = {"code": 4, "message": "Сумма возврата должна быть больше нуля"}
-        if req_id: _idempotency_cache[req_id] = result
-        return result
+    # Проверка счёта
+    result = await db.execute(
+        select(Account).where(Account.account_number == account)
+    )
+    acc = result.scalar_one_or_none()
+    if not acc or cast(Optional[str], acc.status) != "active":
+        raise ValueError(f"Лицевой счёт {account} не найден")
 
-    # 3. Поиск заказа
-    if order_id not in ORDERS:
-        result = {"code": 1, "message": "Заказ не найден"}
-        if req_id: _idempotency_cache[req_id] = result
-        return result
+    # Создание транзакции
+    transaction = Transaction(
+        erip_request_id=erip_request_id,
+        request_type="TransactionStart",
+        erip_transaction_id=erip_transaction_id,
+        personal_account=account,
+        amount=float(amount),
+        currency=currency,
+        terminal_id=terminal if terminal else None,
+        terminal_type=_parse_int(terminal_type),
+        agent_code=_parse_int(agent),
+        auth_type=auth_type if auth_type else None,
+        status="success",
+        processed_at=datetime.now(timezone.utc)
+    )
+    db.add(transaction)
+    await db.flush()
 
-    order = ORDERS[order_id]
+    # Генерация ID транзакции сервиса
+    service_trx_id = f"{cast(int, transaction.id):08d}"
+    transaction.service_trx_id = service_trx_id  # type: ignore[assignment]
 
-    # 4. Проверка: уже возвращён?
-    if order["refunded"]:
-        result = {"code": 2, "message": "Возврат по этому заказу уже выполнен"}
-        if req_id: _idempotency_cache[req_id] = result
-        return result
+    # Добавление строки информации
+    info_text = f"Номер операции: {service_trx_id}"
+    db.add(TransactionInfoLine(
+        transaction_id=cast(int, transaction.id),
+        line_text=info_text,
+        line_order=1
+    ))
 
-    # 5. Проверка суммы
-    if amount > order["amount"]:
-        result = {"code": 3, "message": "Сумма возврата превышает сумму заказа"}
-        if req_id: _idempotency_cache[req_id] = result
-        return result
+    # Формирование XML-ответа
+    xml_response = build_transaction_start_xml(service_trx_id, info_text)
+    transaction.metadata_json = xml_response  # type: ignore[assignment]
+    await db.commit()
 
-    # 6. Успех: помечаем заказ как возвращённый
-    order["refunded"] = True
-    result = {"code": 0, "message": "Возврат успешно обработан"}
+    return Response(
+        content=xml_response.encode("cp1251"),
+        media_type="text/xml; charset=windows-1251",
+        status_code=200
+    )
 
-    # Сохраняем в кэш идемпотентности
-    if req_id:
-        _idempotency_cache[req_id] = result
 
-    return result
+def _parse_int(value: Optional[str]) -> Optional[int]:
+    """Безопасное преобразование строки в целое число."""
+    if value and value.isdigit():
+        return int(value)
+    return None
