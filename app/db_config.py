@@ -7,7 +7,7 @@ import oracledb
 
 load_dotenv()
 
-oracledb.init_oracle_client(lib_dir="/opt/oracle/instantclient")
+oracledb.init_oracle_client(lib_dir="/opt/oracle/instantclient_21_13")
 
 DATABASE_URL = os.getenv(
     "DATABASE_URL",
