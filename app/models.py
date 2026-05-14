@@ -1,39 +1,55 @@
 # app/models.py
+"""
+Модели данных для сервиса ЕРИП.
+
+Определяет структуры таблиц базы данных:
+- Account: счета плательщиков
+- Transaction: журнал транзакций
+- TransactionInfoLine: строки информации о транзакции
+- TransactionError: ошибки транзакций
+"""
 from sqlalchemy import (
     Column, Integer, String, Numeric, Text, DateTime, 
     ForeignKey, Sequence, Index, func
 )
 from sqlalchemy.orm import declarative_base
-from .db_config import Base  # Импортируем Base из твоего db_config.py
+from .db_config import Base  # Импортируем Base из db_config.py
+
 
 # ==========================================
 # 1. СЧЕТА ПЛАТЕЛЬЩИКОВ (для ServiceInfo)
 # ==========================================
 class Account(Base):
+    """
+    Модель счёта плательщика.
+    
+    Хранит информацию о лицевых счетах абонентов,
+    включая данные для отображения в ServiceInfo.
+    """
     __tablename__ = "accounts"
     
-    account_number = Column(String(32), primary_key=True)
-    status = Column(String(20), default="active")
+    account_number = Column(String(32), primary_key=True, comment="Лицевой счёт")
+    status = Column(String(20), default="active", comment="Статус счёта (active/blocked)")
     
-    # [БД] Данные для ServiceInfo
-    debt_amount = Column(Numeric(12, 2), default=0)
-    editable_flag = Column(String(1), default="N")  # Y/N
-    min_amount = Column(Numeric(12, 2), default=0)
-    max_amount = Column(Numeric(12, 2), default=100000)
+    # Финансовые данные
+    debt_amount = Column(Numeric(12, 2), default=0, comment="Сумма задолженности")
+    editable_flag = Column(String(1), default="N", comment="Флаг редактирования суммы (Y/N)")
+    min_amount = Column(Numeric(12, 2), default=0, comment="Минимальная сумма платежа")
+    max_amount = Column(Numeric(12, 2), default=100000, comment="Максимальная сумма платежа")
     
-    # [БД] ФИО и Адрес (хранятся полными, маскируются в коде перед ответом)
-    holder_surname = Column(String(30))
-    holder_firstname = Column(String(30))
-    holder_patronymic = Column(String(30))
-    city = Column(String(30))
-    street = Column(String(30))
-    house = Column(String(10))
-    building = Column(String(10))
-    apartment = Column(String(10))
+    # Данные абонента (маскируются перед отправкой)
+    holder_surname = Column(String(30), comment="Фамилия владельца")
+    holder_firstname = Column(String(30), comment="Имя владельца")
+    holder_patronymic = Column(String(30), comment="Отчество владельца")
+    city = Column(String(30), comment="Город")
+    street = Column(String(30), comment="Улица")
+    house = Column(String(10), comment="Дом")
+    building = Column(String(10), comment="Корпус/строение")
+    apartment = Column(String(10), comment="Квартира/офис")
     
-    currency = Column(String(3), default="933")  # [явно] по умолчанию BYN
-    service_no = Column(Integer, default=1)      # [явно] код услуги
-    created_at = Column(DateTime(timezone=True), server_default=func.systimestamp())
+    currency = Column(String(3), default="933", comment="Код валюты (BYN=933)")
+    service_no = Column(Integer, default=1, comment="Код услуги")
+    created_at = Column(DateTime(timezone=True), server_default=func.systimestamp(), comment="Дата создания")
 
     def __repr__(self):
         return f"<Account(acc='{self.account_number}', debt={self.debt_amount})>"
@@ -43,30 +59,36 @@ class Account(Base):
 # 2. ЖУРНАЛ ТРАНЗАКЦИЙ 
 # ==========================================
 class Transaction(Base):
+    """
+    Модель транзакции ЕРИП.
+    
+    Журналирует все входящие запросы от ЕРИП
+    для обеспечения идемпотентности и аудита.
+    """
     __tablename__ = "transactions"
     
-    id = Column(Integer, Sequence('transactions_seq'), primary_key=True)
-    erip_request_id = Column(String(64), nullable=False, unique=True, index=True)  # 🔑 Идемпотентность
-    request_type = Column(String(20))  # ServiceInfo / TransactionStart / ...
+    id = Column(Integer, Sequence('transactions_seq'), primary_key=True, comment="Внутренний ID")
+    erip_request_id = Column(String(64), nullable=False, unique=True, index=True, comment="ID запроса ЕРИП (идемпотентность)")
+    request_type = Column(String(20), comment="Тип запроса (ServiceInfo/TransactionStart)")
     
-    # [БД] Внешние идентификаторы
-    erip_transaction_id = Column(String(32), index=True)
-    service_trx_id = Column(String(12), unique=True, index=True)  # Твой номер операции
-    personal_account = Column(String(32), nullable=False, index=True)
+    # Внешние идентификаторы
+    erip_transaction_id = Column(String(32), index=True, comment="ID транзакции от ЕРИП")
+    service_trx_id = Column(String(12), unique=True, index=True, comment="Внутренний номер операции")
+    personal_account = Column(String(32), nullable=False, index=True, comment="Лицевой счёт")
     
-    # [БД] Финансы и каналы
-    amount = Column(Numeric(12, 2), default=0)
-    currency = Column(String(3), default="933")
-    terminal_id = Column(String(30))
-    terminal_type = Column(Integer)
-    agent_code = Column(Integer)
-    auth_type = Column(String(10))
+    # Финансы и каналы
+    amount = Column(Numeric(12, 2), default=0, comment="Сумма операции")
+    currency = Column(String(3), default="933", comment="Код валюты")
+    terminal_id = Column(String(30), comment="ID терминала")
+    terminal_type = Column(Integer, comment="Тип терминала")
+    agent_code = Column(Integer, comment="Код агента")
+    auth_type = Column(String(10), comment="Тип авторизации")
     
-    status = Column(String(20), default="pending")  # pending/success/failed/storned
-    created_at = Column(DateTime(timezone=True), server_default=func.systimestamp())
-    processed_at = Column(DateTime(timezone=True))
+    status = Column(String(20), default="pending", comment="Статус (pending/success/failed/storned)")
+    created_at = Column(DateTime(timezone=True), server_default=func.systimestamp(), comment="Время создания")
+    processed_at = Column(DateTime(timezone=True), comment="Время обработки")
     
-    metadata_json = Column(Text)  
+    metadata_json = Column(Text, comment="JSON/XML ответ")
 
     __table_args__ = (
         Index("idx_erip_req", "erip_request_id"),
@@ -82,13 +104,19 @@ class Transaction(Base):
 # 3. СТРОКИ ОТВЕТА (InfoLine)
 # ==========================================
 class TransactionInfoLine(Base):
+    """
+    Строка информационного сообщения транзакции.
+    
+    Дополнительные текстовые сообщения,
+    возвращаемые в ответе ЕРИП.
+    """
     __tablename__ = "transaction_info_lines"
     
-    id = Column(Integer, Sequence('tx_info_lines_seq'), primary_key=True)
-    transaction_id = Column(Integer, ForeignKey("transactions.id", ondelete="CASCADE"), nullable=False)
-    line_text = Column(String(1000), nullable=False)
-    line_order = Column(Integer, default=1)
-    created_at = Column(DateTime(timezone=True), server_default=func.systimestamp())
+    id = Column(Integer, Sequence('tx_info_lines_seq'), primary_key=True, comment="ID строки")
+    transaction_id = Column(Integer, ForeignKey("transactions.id", ondelete="CASCADE"), nullable=False, comment="ID транзакции")
+    line_text = Column(String(1000), nullable=False, comment="Текст сообщения")
+    line_order = Column(Integer, default=1, comment="Порядок отображения")
+    created_at = Column(DateTime(timezone=True), server_default=func.systimestamp(), comment="Время создания")
 
     __table_args__ = (Index("idx_info_lines_tx", "transaction_id"),)
 
@@ -97,17 +125,23 @@ class TransactionInfoLine(Base):
 
 
 # ==========================================
-# ErrorLine
+# ОШИБКИ ТРАНЗАКЦИЙ
 # ==========================================
 class TransactionError(Base):
+    """
+    Модель ошибок транзакций.
+    
+    Журналирует ошибки, возникшие при обработке
+    запросов ЕРИП.
+    """
     __tablename__ = "transaction_errors"
     
-    id = Column(Integer, Sequence('tx_errors_seq'), primary_key=True)
-    transaction_id = Column(Integer, ForeignKey("transactions.id", ondelete="SET NULL"))
-    error_stage = Column(String(20), nullable=False)  # ServiceInfo / TransactionStart
-    error_code = Column(Integer)
-    error_text = Column(Text)
-    created_at = Column(DateTime(timezone=True), server_default=func.systimestamp())
+    id = Column(Integer, Sequence('tx_errors_seq'), primary_key=True, comment="ID записи")
+    transaction_id = Column(Integer, ForeignKey("transactions.id", ondelete="SET NULL"), comment="ID транзакции")
+    error_stage = Column(String(20), nullable=False, comment="Этап ошибки (ServiceInfo/TransactionStart)")
+    error_code = Column(Integer, comment="Код ошибки")
+    error_text = Column(Text, comment="Текст ошибки")
+    created_at = Column(DateTime(timezone=True), server_default=func.systimestamp(), comment="Время создания")
 
     __table_args__ = (Index("idx_errors_tx", "transaction_id"),)
 
