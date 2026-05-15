@@ -123,7 +123,7 @@ def build_transaction_start_xml(service_trx_id: str, info_text: str) -> str:
     return '\n'.join(xml_parts)
 
 
-def build_error_response_xml(error_text: str) -> bytes:
+def build_error_response_xml(error_text: str) -> str:
     """
     Формирует XML-ответ с ошибкой.
     
@@ -131,7 +131,7 @@ def build_error_response_xml(error_text: str) -> bytes:
         error_text: Текст ошибки
         
     Returns:
-        Закодированная XML-строка (Windows-1251)
+        XML-строка (Windows-1251)
     """
     # Экранирование специальных символов XML
     safe_text = (
@@ -149,4 +149,4 @@ def build_error_response_xml(error_text: str) -> bytes:
         '    </Error>',
         '</ServiceProvider_Response>'
     ]
-    return '\n'.join(xml_parts).encode("cp1251")
+    return '\n'.join(xml_parts)

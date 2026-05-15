@@ -18,7 +18,10 @@ from .xml_utils import build_service_info_xml, build_error_response_xml
 # НАСТРОЙКА
 # ==========================================
 
-def lifespan(app: FastAPI):
+from contextlib import asynccontextmanager
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
     setup_logging()
     logger = logging.getLogger(__name__)
     logger.info("🚀 ERIP Billing Service started")
