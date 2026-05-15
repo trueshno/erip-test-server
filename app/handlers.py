@@ -2,7 +2,7 @@
 """
 Обработчики запросов ЕРИП: ServiceInfo и TransactionStart.
 """
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import Session
 from sqlalchemy import select
 from fastapi.responses import Response
 from datetime import datetime, timezone
@@ -16,8 +16,8 @@ from .xml_utils import build_service_info_xml, build_transaction_start_xml
 logger = logging.getLogger(__name__)
 
 
-async def handle_service_info_request(
-    db: AsyncSession,
+def handle_service_info_request(
+    db: Session,
     request_id: str,
     account: Optional[str],
     erip_request_id: Optional[str],
@@ -47,7 +47,7 @@ async def handle_service_info_request(
         raise ValueError("Не указан лицевой счёт (PersonalAccount)")
 
     # Поиск счёта в базе
-    result = await db.execute(
+    result = db.execute(
         select(Account).where(Account.account_number == account)
     )
     acc = result.scalar_one_or_none()
@@ -71,7 +71,7 @@ async def handle_service_info_request(
         metadata_json=xml_response
     )
     db.add(transaction)
-    await db.commit()
+    db.commit()
 
     return Response(
         content=xml_response.encode("cp1251"),
@@ -80,8 +80,8 @@ async def handle_service_info_request(
     )
 
 
-async def handle_transaction_start_request(
-    db: AsyncSession,
+def handle_transaction_start_request(
+    db: Session,
     request_id: str,
     account: str,
     amount_str: str,
@@ -133,7 +133,7 @@ async def handle_transaction_start_request(
         raise ValueError("Неверный формат суммы")
 
     # Проверка счёта
-    result = await db.execute(
+    result = db.execute(
         select(Account).where(Account.account_number == account)
     )
     acc = result.scalar_one_or_none()
@@ -156,7 +156,7 @@ async def handle_transaction_start_request(
         processed_at=datetime.now(timezone.utc)
     )
     db.add(transaction)
-    await db.flush()
+    db.flush()
 
     # Генерация ID транзакции сервиса
     service_trx_id = f"{cast(int, transaction.id):08d}"
@@ -173,7 +173,7 @@ async def handle_transaction_start_request(
     # Формирование XML-ответа
     xml_response = build_transaction_start_xml(service_trx_id, info_text)
     transaction.metadata_json = xml_response  # type: ignore[assignment]
-    await db.commit()
+    db.commit()
 
     return Response(
         content=xml_response.encode("cp1251"),

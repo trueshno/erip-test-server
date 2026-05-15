@@ -1,8 +1,7 @@
 # app/main.py
 from fastapi import FastAPI, File, UploadFile, Request, Depends, HTTPException
 from fastapi.responses import Response
-from contextlib import asynccontextmanager
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import Session
 from sqlalchemy import select
 from defusedxml.ElementTree import fromstring
 from datetime import datetime, timezone
@@ -19,8 +18,7 @@ from .xml_utils import build_service_info_xml, build_error_response_xml
 # НАСТРОЙКА
 # ==========================================
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
+def lifespan(app: FastAPI):
     setup_logging()
     logger = logging.getLogger(__name__)
     logger.info("🚀 ERIP Billing Service started")
@@ -67,17 +65,17 @@ def _xml_safe(text: Optional[str]) -> str:
 # ==========================================
 
 @app.post("/erip/refund")
-async def handle_erip_request(
+def handle_erip_request(
     request: Request,
     xml: UploadFile = File(...),
-    db: AsyncSession = Depends(get_db)
+    db: Session = Depends(get_db)
 ):
     req_id = request.headers.get("X-Request-ID", str(uuid.uuid4())[:8])
     start_time = time.time()
 
     try:
         # 1. Чтение и парсинг XML
-        raw_bytes = await xml.read()
+        raw_bytes = xml.read()
         xml_str = raw_bytes.decode("cp1251", errors="replace")
         root = fromstring(xml_str)
 
@@ -95,7 +93,7 @@ async def handle_erip_request(
 
         # 3. Идемпотентность (с учётом типа запроса!)
         if erip_request_id:
-            res = await db.execute(
+            res = db.execute(
                 select(Transaction).where(
                     Transaction.erip_request_id == erip_request_id,
                     Transaction.request_type == request_type  # ✅ Ключевое исправление
@@ -112,7 +110,7 @@ async def handle_erip_request(
 
         # 4. Маршрутизация
         if request_type == "ServiceInfo":
-            return await _handle_service_info(
+            return _handle_service_info(
                 db=db,
                 request_id=req_id,
                 account=personal_acc,
@@ -146,8 +144,8 @@ async def handle_erip_request(
 # ОБРАБОТЧИК ServiceInfo
 # ==========================================
 
-async def _handle_service_info(
-    db: AsyncSession,
+def _handle_service_info(
+    db: Session,
     request_id: str,
     account: Optional[str],
     erip_request_id: Optional[str],
@@ -162,7 +160,7 @@ async def _handle_service_info(
         raise ValueError("Не указан лицевой счёт (PersonalAccount)")
     
     # 2. Поиск счёта в БД
-    result = await db.execute(
+    result = db.execute(
         select(Account).where(Account.account_number == account)
     )
     acc = result.scalar_one_or_none()
@@ -232,7 +230,7 @@ async def _handle_service_info(
             metadata_json=xml_response
         )
         db.add(new_tx)
-        await db.commit()
+        db.commit()
     
     elapsed = time.time() - start_time
     logger.info(f"✅ ServiceInfo для {account} обработан за {elapsed:.3f}с", extra={"request_id": request_id})
@@ -250,10 +248,10 @@ async def _handle_service_info(
 # ==========================================
 
 @app.get("/health")
-async def health_check():
+def health_check():
     try:
-        async with engine.connect() as conn:
-            await conn.execute(select(1))
+        with engine.connect() as conn:
+            conn.execute(select(1))
         return {"status": "ok", "db": "connected"}
     except Exception as e:
         logger.error(f"Health check failed: {e}")
